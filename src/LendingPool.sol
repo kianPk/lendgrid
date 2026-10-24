@@ -46,6 +46,8 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     uint16 public slope1Bps = 800; // +8% to kink
     uint16 public slope2Bps = 4000; // steep after kink
     uint16 public kinkBps = 8000; // 80% utilization
+    /// @notice Hard cap on aggregate debt (debt-asset units). 0 = uncapped.
+    uint256 public borrowCap;
 
     event Deposited(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
@@ -56,12 +58,14 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     );
     event ParamsUpdated(uint16 ltvBps, uint16 liqThresholdBps, uint16 liqBonusBps);
     event Accrued(uint256 borrowIndex, uint256 timestamp, uint256 borrowAprBps);
+    event BorrowCapUpdated(uint256 cap);
 
     error InvalidParams();
     error InsufficientCollateral();
     error HealthyPosition();
     error ZeroAmount();
     error Undercollateralized();
+    error BorrowCapExceeded();
 
     constructor(
         address collateral_,
@@ -202,6 +206,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         accrue();
         _syncUser(msg.sender);
         if (amount == 0) revert ZeroAmount();
+        if (borrowCap != 0 && totalDebt + amount > borrowCap) revert BorrowCapExceeded();
         debtBalance[msg.sender] += amount;
         totalDebt += amount;
         userBorrowIndex[msg.sender] = borrowIndex;
@@ -210,6 +215,11 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         }
         debtAsset.safeTransfer(msg.sender, amount);
         emit Borrowed(msg.sender, amount);
+    }
+
+    function setBorrowCap(uint256 cap) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        borrowCap = cap;
+        emit BorrowCapUpdated(cap);
     }
 
     function repay(uint256 amount) external whenNotPaused nonReentrant {
