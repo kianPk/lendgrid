@@ -104,6 +104,33 @@ contract LendingPoolTest is Test {
         vm.stopPrank();
     }
 
+    function test_fixedBorrowRatePerSecond() public {
+        // ~10% APR equivalent: 1000 bps / year as WAD per second
+        uint256 rateWad = (1000 * 1e18) / (uint256(10_000) * 365 days);
+        vm.prank(admin);
+        pool.setBorrowRateBpsPerSecond(rateWad);
+
+        vm.startPrank(alice);
+        weth.approve(address(pool), 10e18);
+        pool.deposit(10e18);
+        pool.borrow(10_000e6);
+        vm.stopPrank();
+
+        uint256 debtBefore = pool.debtBalance(alice);
+        vm.warp(block.timestamp + 365 days);
+        pool.accrue();
+
+        vm.startPrank(alice);
+        usdc.approve(address(pool), type(uint256).max);
+        usdc.mint(alice, 10_000e6);
+        pool.repay(1);
+        vm.stopPrank();
+
+        uint256 debtAfter = pool.debtBalance(alice);
+        assertGt(debtAfter + 1, debtBefore);
+        assertApproxEqAbs(debtAfter + 1, debtBefore + (debtBefore * 1000) / 10_000, 100e6);
+    }
+
     function test_interestAccruesOverTime() public {
         vm.startPrank(alice);
         weth.approve(address(pool), 10e18);

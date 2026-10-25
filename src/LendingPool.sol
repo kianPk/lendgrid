@@ -47,6 +47,9 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     uint16 public slope2Bps = 4000; // steep after kink
     uint16 public kinkBps = 8000; // 80% utilization
 
+    /// @notice Fixed per-second borrow rate in bps (WAD-scaled). 0 = derive from utilization APR.
+    uint256 public borrowRateBpsPerSecond;
+
     event Deposited(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
     event Borrowed(address indexed user, uint256 amount);
@@ -56,6 +59,7 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
     );
     event ParamsUpdated(uint16 ltvBps, uint16 liqThresholdBps, uint16 liqBonusBps);
     event Accrued(uint256 borrowIndex, uint256 timestamp, uint256 borrowAprBps);
+    event BorrowRateUpdated(uint256 bpsPerSecondWad);
 
     error InvalidParams();
     error InsufficientCollateral();
@@ -113,6 +117,18 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
         return baseRateBps + slope1Bps + (slope2Bps * excess) / (BPS - kinkBps);
     }
 
+    /// @notice WAD-scaled borrow factor applied each second: `debt * rateWad * dt / 1e18`.
+    function borrowRatePerSecondWad() public view returns (uint256) {
+        if (borrowRateBpsPerSecond != 0) return borrowRateBpsPerSecond;
+        uint256 apr = borrowAprBps();
+        return (apr * 1e18) / (uint256(BPS) * 365 days);
+    }
+
+    function setBorrowRateBpsPerSecond(uint256 rateWad) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        borrowRateBpsPerSecond = rateWad;
+        emit BorrowRateUpdated(rateWad);
+    }
+
     function accrue() public {
         uint256 dt = block.timestamp - lastAccrual;
         if (dt == 0 || totalDebt == 0) {
@@ -120,10 +136,9 @@ contract LendingPool is AccessControl, Pausable, ReentrancyGuard {
             return;
         }
         uint256 apr = borrowAprBps();
-        // index *= 1 + apr * dt / year
-        uint256 interestFactor = (apr * dt * 1e18) / (uint256(BPS) * 365 days);
+        uint256 rateWad = borrowRatePerSecondWad();
+        uint256 interestFactor = rateWad * dt;
         borrowIndex += (borrowIndex * interestFactor) / 1e18;
-        // Grow aggregate debt with the same factor (principal-only accounting for lab)
         totalDebt += (totalDebt * interestFactor) / 1e18;
         lastAccrual = block.timestamp;
         emit Accrued(borrowIndex, block.timestamp, apr);

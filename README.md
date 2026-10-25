@@ -2,6 +2,7 @@
 
 **Overcollateralized lending pool** — deposit collateral, borrow against LTV, repay, or liquidate unhealthy positions. Oracle-priced health factors with liquidation bonus.
 
+[![CI](https://github.com/kianPk/lendgrid/actions/workflows/ci.yml/badge.svg)](https://github.com/kianPk/lendgrid/actions/workflows/ci.yml)
 [![Demo](https://img.shields.io/badge/Demo-kianpk.github.io%2Flendgrid-10b981?style=for-the-badge)](https://kianpk.github.io/lendgrid/)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636?style=for-the-badge&logo=solidity)](https://github.com/kianPk/lendgrid)
 [![Foundry](https://img.shields.io/badge/Foundry-forge-000000?style=for-the-badge)](https://book.getfoundry.sh/)
@@ -35,6 +36,7 @@ forge test -vv
 
 ## Also in this release
 
+- **Per-second borrow rate** — `setBorrowRateBpsPerSecond` (WAD-scaled bps/s) or utilization-derived APR fallback
 - Utilization-aware borrow APR (two-slope kink model)
 - Index-based interest accrual + per-user sync
 - Liquidation with bonus still intact
